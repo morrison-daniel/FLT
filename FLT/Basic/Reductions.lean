@@ -1,10 +1,10 @@
+import Mathlib.AlgebraicGeometry.EllipticCurve.Affine
 import Mathlib.Data.PNat.Basic
 import Mathlib.NumberTheory.FLT.Four
 import Mathlib.NumberTheory.FLT.Three
-import Mathlib.Tactic
-import Mathlib.AlgebraicGeometry.EllipticCurve.Affine
 import Mathlib.RepresentationTheory.Basic
-import Mathlib.RingTheory.SimpleModule
+import Mathlib.RingTheory.SimpleModule.Basic
+import Mathlib.Tactic.ModCases
 import FLT.EllipticCurve.Torsion
 
 
@@ -205,23 +205,30 @@ upon a Frey package guarantee that the running hypotheses in
 Section 4.1 of [Serre] all hold. We put the curve into the form where the
 equation is semistable at 2, rather than the usual `Y^2=X(X-a^p)(X+b^p)` form.
 The change of variables is `X=4x` and `Y=8y+4x`, and then divide through by 64. -/
-def FreyCurve (P : FreyPackage) : EllipticCurve ℚ := {
-    a₁ := 1
-    -- a₂ is (or should be) an integer because of the congruences assumed e.g. P.ha4
-    a₂ := (P.b ^ P.p - 1 - P.a ^ P.p) / 4
-    a₃ := 0
-    a₄ := -(P.a ^ P.p) * (P.b ^ P.p) / 16 -- this should also be an integer
-    a₆ := 0
-    Δ' := Units.mk0 ((P.a ^ P.p) ^ 2 * (P.b ^ P.p) ^ 2 * (P.c ^ P.p) ^ 2 / 2 ^ 8) <| by
-      field_simp
-      norm_cast
-      simp_rw [← mul_pow]
-      refine pow_ne_zero 2 <| pow_ne_zero P.p <| (mul_ne_zero (mul_ne_zero P.ha0 P.hb0) P.hc0)
-    coe_Δ' := by
-      simp only [Units.val_mk0, ← Int.cast_pow P.c, ← P.hFLT]
-      field_simp [EllipticCurve.Δ', WeierstrassCurve.Δ, WeierstrassCurve.b₂, WeierstrassCurve.b₄,
-        WeierstrassCurve.b₆, WeierstrassCurve.b₈]
-      ring }
+def FreyCurve (P : FreyPackage) : WeierstrassCurve ℚ where
+  a₁ := 1
+  -- a₂ is (or should be) an integer because of the congruences assumed e.g. P.ha4
+  a₂ := (P.b ^ P.p - 1 - P.a ^ P.p) / 4
+  a₃ := 0
+  a₄ := -(P.a ^ P.p) * (P.b ^ P.p) / 16 -- this should also be an integer
+  a₆ := 0
+
+lemma FreyCurve.Δ (P : FreyPackage) : P.FreyCurve.Δ = (P.a*P.b*P.c)^(2*P.p) / 2 ^ 8 := by
+  trans (P.a ^ P.p) ^ 2 * (P.b ^ P.p) ^ 2 * (P.c ^ P.p) ^ 2 / 2 ^ 8
+  · field_simp
+    norm_cast
+    simp [← P.hFLT, WeierstrassCurve.Δ, FreyCurve, WeierstrassCurve.b₂, WeierstrassCurve.b₄,
+      WeierstrassCurve.b₆, WeierstrassCurve.b₈]
+    ring
+  · simp [← mul_pow, ← pow_mul, mul_comm 2]
+
+instance (P : FreyPackage) : WeierstrassCurve.IsElliptic (FreyCurve P) where
+  isUnit := by
+    rw [FreyCurve.Δ, isUnit_iff_ne_zero]
+    apply div_ne_zero
+    · norm_cast
+      exact pow_ne_zero _ <| mul_ne_zero (mul_ne_zero P.ha0 P.hb0) P.hc0
+    · norm_num
 
 lemma FreyCurve.b₂ (P : FreyPackage) :
     P.FreyCurve.b₂ = P.b ^ P.p - P.a ^ P.p := by
@@ -246,25 +253,17 @@ lemma FreyCurve.c₄' (P : FreyPackage) :
 
 lemma FreyCurve.Δ'inv (P : FreyPackage) :
     (↑(P.FreyCurve.Δ'⁻¹) : ℚ) = 2 ^ 8 / (P.a*P.b*P.c)^(2*P.p) := by
-  simp [FreyCurve]
-  ring
+  simp [FreyCurve.Δ]
 
 lemma FreyCurve.j (P : FreyPackage) :
     P.FreyCurve.j = 2^8*(P.c^(2*P.p)-(P.a*P.b)^P.p) ^ 3 /(P.a*P.b*P.c)^(2*P.p) := by
-  rw [mul_div_right_comm, EllipticCurve.j, FreyCurve.Δ'inv, FreyCurve.c₄']
+  rw [mul_div_right_comm, WeierstrassCurve.j, FreyCurve.Δ'inv, FreyCurve.c₄']
 
 private lemma j_pos_aux (a b : ℤ) (hb : b ≠ 0) : 0 < (a + b) ^ 2 - a * b := by
-  cases le_or_lt 0 (a * b) with
-  | inl h =>
-    calc
-      0 < a * a + a * b + b * b := ?_
-      _ = _ := by ring
-    apply add_pos_of_nonneg_of_pos
-    apply add_nonneg (mul_self_nonneg _) h
-    apply mul_self_pos.mpr hb
-  | inr h =>
-    rw [sub_pos]
-    exact h.trans_le (sq_nonneg _)
+  rify
+  calc
+    (0 : ℝ) < (a ^ 2 + (a + b) ^ 2 + b ^ 2) / 2 := by positivity
+    _ = (a + b) ^ 2 - a * b := by ring
 
 /-- The q-adic valuation of the j-invariant of the Frey curve is a multiple of p if 2 < q is
 a prime of bad reduction. -/
@@ -344,13 +343,14 @@ It follows that there is no Frey package.
 work of Mazur and Wiles/Ribet to rule out all possibilities for the
 $p$-torsion in the corresponding Frey curve. -/
 theorem FreyPackage.false (P : FreyPackage) : False := by
+  -- by Wiles' result, the p-torsion is not irreducible
   apply Wiles_Frey P
+  -- but by Mazur's result, the p-torsion is irreducible!
   exact Mazur_Frey P
+  -- Contradiction!
 
 -- Fermat's Last Theorem is true
 theorem Wiles_Taylor_Wiles : FermatLastTheorem := by
-  apply of_p_ge_5
-  intro p hp5 pp a b c ha hb _ h
-  refine Nonempty.elim ?_ FreyPackage.false
+  refine of_p_ge_5 fun p hp5 pp a b c ha hb _ h ↦  Nonempty.elim ?_ FreyPackage.false
   apply FreyPackage.of_not_FermatLastTheorem_p_ge_5 (a := a) (b := b) (c := c)
     <;> assumption_mod_cast

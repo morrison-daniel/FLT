@@ -92,14 +92,30 @@ noncomputable def _root_.Ideal.isoBaseOfIsPrincipal {I : Ideal R} [IsDomain R]
     rw [LinearMap.mem_ker] at h
     apply (AddSubmonoid.mk_eq_zero _).mp at h
     rw [Ideal.mem_bot]
-    refine eq_zero_of_ne_zero_of_mul_right_eq_zero ?_ h
-    refine mt (fun h3 ↦ ?_) hI
+    refine eq_zero_of_ne_zero_of_mul_right_eq_zero (mt (fun h3 ↦ ?_) hI) h
     rwa [Submodule.IsPrincipal.eq_bot_iff_generator_eq_zero I])
   (by
     rintro ⟨i, hi⟩
     rw [Submodule.IsPrincipal.mem_iff_eq_smul_generator] at hi
     obtain ⟨s, rfl⟩ := hi
     exact ⟨s, rfl⟩)
+
+/--
+Describing how isoBaseOfIsPrincipal acts: more specifically shows that the composite
+R → I → R is the same as multiplication by the generator of I.
+-/
+theorem extracted_1 [IsPrincipalIdealRing R] [IsDomain R] {I : Ideal R}
+    (h : I ≠ ⊥) :
+    Submodule.subtype I ∘ₗ ↑(Ideal.isoBaseOfIsPrincipal h) =
+    LinearMap.mul R R (Submodule.IsPrincipal.generator I) := by
+  ext
+  simp [Ideal.isoBaseOfIsPrincipal,
+    LinearMap.EquivOfKerEqBotOfSurjective, Ideal.mulGeneratorOfIsPrincipal]
+
+theorem extracted_2 [IsPrincipalIdealRing R] {y : R} :
+    lift (lsmul R M ∘ₗ LinearMap.mul R R y) = lsmul R M y ∘ₗ lift (lsmul R M) := by
+  ext x
+  simp
 
 open Module Submodule in
 /-- If `R` is a PID then an `R`-module is flat iff it has no torsion. -/
@@ -111,7 +127,7 @@ theorem flat_iff_torsion_eq_bot [IsPrincipalIdealRing R] [IsDomain R] :
     -- now assume R is a PID and M is a torsionfree R-module
   · intro htors
     -- we need to show that if I is an ideal of R then the natural map I ⊗ M → M is injective
-    constructor
+    rw [iff_lift_lsmul_comp_subtype_injective]
     rintro I -
     -- If I = 0 this is obvious because I ⊗ M is a subsingleton (i.e. has ≤1 element)
     obtain (rfl | h) := eq_or_ne I ⊥
@@ -120,5 +136,14 @@ theorem flat_iff_torsion_eq_bot [IsPrincipalIdealRing R] [IsDomain R] :
     · -- If I ≠ 0 then I ≅ R because R is a PID
       apply Function.Injective.of_comp_right _
         (LinearEquiv.rTensor M (Ideal.isoBaseOfIsPrincipal h)).surjective
-      rw [← LinearEquiv.coe_toLinearMap, ← LinearMap.coe_comp]
-      sorry
+      rw [← LinearEquiv.coe_toLinearMap, ← LinearMap.coe_comp, LinearEquiv.coe_rTensor, rTensor,
+        lift_comp_map, LinearMap.compl₂_id, LinearMap.comp_assoc, extracted_1, extracted_2,
+        LinearMap.coe_comp]
+      rw [← noZeroSMulDivisors_iff_torsion_eq_bot] at htors
+      have : IsPrincipal.generator I ≠ 0 := by
+        rwa [ne_eq, ← IsPrincipal.eq_bot_iff_generator_eq_zero]
+      refine Function.Injective.comp (LinearMap.lsmul_injective this) ?_
+      rw [← Equiv.injective_comp (TensorProduct.lid R M).symm.toEquiv]
+      convert Function.injective_id
+      ext x
+      simp

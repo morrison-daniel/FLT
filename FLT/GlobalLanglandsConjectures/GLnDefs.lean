@@ -1,5 +1,5 @@
 /-
-Copyright (c) 2024 Kevin Buzzaed. All rights reserved.
+Copyright (c) 2024 Kevin Buzzard. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Kevin Buzzard, Jonas Bayer, Mario Carneiro
 -/
@@ -30,6 +30,9 @@ of the `GL_n` functor. There's notation `GL (Fin n)` for this.
 -/
 
 open scoped Manifold
+/- Next line is necessary while the manifold smoothness class is not extended to `ω`.
+Later, replace with `open scoped ContDiff`. -/
+local notation "∞" => (⊤ : ℕ∞)
 
 namespace DedekindDomain
 
@@ -74,21 +77,21 @@ section PR13703
 
 open scoped nonZeroDivisors
 
-noncomputable instance : Algebra R (FiniteAdeleRing R K) :=
+noncomputable instance foobar37 : Algebra R (FiniteAdeleRing R K) :=
   RingHom.toAlgebra ((algebraMap K (FiniteAdeleRing R K)).comp (algebraMap R K))
 
-@[deprecated mul_nonZeroDivisor_mem_finiteIntegralAdeles]
+@[deprecated mul_nonZeroDivisor_mem_finiteIntegralAdeles (since := "2024-08-11")]
 lemma FiniteAdeleRing.clear_denominator (a : FiniteAdeleRing R K) :
     ∃ (b : R⁰) (c : R_hat R K), a * (b : R) = c := by
   exact mul_nonZeroDivisor_mem_finiteIntegralAdeles a
 
-#check Classical.choose (v.valuation_exists_uniformizer K)
+--#check Classical.choose (v.valuation_exists_uniformizer K)
 
 -- These instances are sorry-free in the PR.
 instance : TopologicalSpace (FiniteAdeleRing ℤ ℚ) := sorry
 
 
-instance instTopologicalRingFiniteAdeleRing : TopologicalRing (FiniteAdeleRing ℤ ℚ) := sorry
+instance instTopologicalRingFiniteAdeleRing : IsTopologicalRing (FiniteAdeleRing ℤ ℚ) := sorry
 
 end PR13703
 
@@ -129,10 +132,10 @@ theorem diamond_fix :
   conv_lhs => rw [← @bracketBilin_apply_apply R _ _ _ _]
   rw [← @bracketBilin_apply_apply R _ _ _ (_) (.ofAssociativeAlgebra) _ _ (_) (_) x y]
   rotate_left
-  exact @lieAlgebraSelfModule _ _ _ (_) (_)
+  exact @lieAlgebraSelfModule ..
   refine LinearMap.congr_fun₂ ?_ x y
   ext xa xb ya yb
-  change @Bracket.bracket _ _ (_) (xa ⊗ₜ[R] xb) (ya ⊗ₜ[R] yb) = _
+  change @Bracket.bracket _ _ _ (xa ⊗ₜ[R] xb) (ya ⊗ₜ[R] yb) = _
   dsimp [Ring.lie_def]
   rw [TensorProduct.tmul_sub, mul_comm]
 
@@ -163,14 +166,14 @@ variable (n : ℕ)
 variable (G : Type) [TopologicalSpace G] [Group G]
   (E : Type) [NormedAddCommGroup E] [NormedSpace ℝ E]
   [ChartedSpace E G]
-  [LieGroup 𝓘(ℝ, E) G]
+  [LieGroup 𝓘(ℝ, E) ⊤ G]
 
 def action :
     LeftInvariantDerivation 𝓘(ℝ, E) G →ₗ⁅ℝ⁆ (Module.End ℝ C^∞⟮𝓘(ℝ, E), G; ℝ⟯) where
   toFun l := Derivation.toLinearMap l
-  map_add' := by simp
-  map_smul' := by simp
-  map_lie' {x y} := rfl
+  map_add' _ _ := rfl
+  map_smul' _ _ := rfl
+  map_lie' {_ _} := rfl
 
 open scoped TensorProduct
 
@@ -256,7 +259,7 @@ structure IsSmooth (f : GL (Fin n) (FiniteAdeleRing ℤ ℚ) × GL (Fin n) ℝ �
   loc_cst (y : GL (Fin n) ℝ) :
     IsLocallyConstant (fun x ↦ f (x, y))
   smooth (x : GL (Fin n) (FiniteAdeleRing ℤ ℚ)) :
-    Smooth 𝓘(ℝ, Matrix (Fin n) (Fin n) ℝ) 𝓘(ℝ, ℂ) (fun y ↦ f (x, y))
+    ContMDiff 𝓘(ℝ, Matrix (Fin n) (Fin n) ℝ) 𝓘(ℝ, ℂ) ∞ (fun y ↦ f (x, y))
 
 open Matrix
 
@@ -269,7 +272,7 @@ structure IsSlowlyIncreasing (f : GeneralLinearGroup (Fin n) ℝ → ℂ) : Prop
     ‖f M‖ ≤ C * (s (M : Matrix (Fin n) (Fin n) ℝ)) ^ N
 
 --
-#check Matrix.orthogonalGroup (Fin n) ℝ
+--#check Matrix.orthogonalGroup (Fin n) ℝ
 
 structure preweight (n : ℕ) where
   d : ℕ -- dimension
@@ -281,11 +284,11 @@ open CategoryTheory
 noncomputable def preweight.fdRep (n : ℕ) (w : preweight n) :
     FDRep ℂ (orthogonalGroup (Fin n) ℝ) where
   V := FGModuleCat.of ℂ (Fin w.d → ℂ)
-  ρ := {
-    toFun := fun A ↦ {
+  ρ := MonCat.ofHom {
+    toFun := fun A ↦ ModuleCat.ofHom {
       toFun := fun x ↦ (w.rho A).1 *ᵥ x
-      map_add' := fun _ _ ↦ Matrix.mulVec_add _ _ _
-      map_smul' := fun _ _ ↦ by simpa using Matrix.mulVec_smul _ _ _ }
+      map_add' := fun _ _ ↦ Matrix.mulVec_add ..
+      map_smul' := fun _ _ ↦ by simpa using Matrix.mulVec_smul .. }
     map_one' := by aesop
     map_mul' := fun _ _ ↦ by
       simp only [obj_carrier, MonCat.mul_of, _root_.map_mul, Units.val_mul, ← Matrix.mulVec_mulVec]

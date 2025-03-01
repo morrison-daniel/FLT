@@ -2,6 +2,7 @@ import Mathlib.RingTheory.DedekindDomain.FiniteAdeleRing
 import Mathlib.Tactic.Peel
 import Mathlib.Analysis.Quaternion
 import Mathlib.RingTheory.Flat.Basic
+import FLT.HIMExperiments.flatness
 /-
 
 # Example of a space of automorphic forms
@@ -75,7 +76,7 @@ instance charZero : CharZero ZHat := ⟨ fun a b h ↦ by
 open BigOperators Nat Finset in
 /-- A nonarchimedean analogue `0! + 1! + 2! + ⋯` of `e = 1/0! + 1/1! + 1/2! + ⋯`.
 It is defined as the function whose value at `ZMod n` is the sum of `i!` for `0 ≤ i < n`.-/
-def e : ZHat := ⟨fun (n : ℕ+) ↦ ∑ i in range (n : ℕ), i !, by
+def e : ZHat := ⟨fun (n : ℕ+) ↦ ∑ i ∈ range (n : ℕ), i !, by
   intros D N hDN
   dsimp only
   obtain ⟨k, hk⟩ := exists_add_of_le <| le_of_dvd N.pos hDN
@@ -87,7 +88,7 @@ def e : ZHat := ⟨fun (n : ℕ+) ↦ ∑ i in range (n : ℕ), i !, by
 
 open BigOperators Nat Finset
 
-lemma e_def (n : ℕ+) : e n = ∑ i in range (n : ℕ), (i ! : ZMod n) := rfl
+lemma e_def (n : ℕ+) : e n = ∑ i ∈ range (n : ℕ), (i ! : ZMod n) := rfl
 
 lemma _root_.Nat.sum_factorial_lt_factorial_succ {j : ℕ} (hj : 1 < j) :
     ∑ i ∈ range (j + 1), i ! < (j + 1) ! := by
@@ -95,8 +96,7 @@ lemma _root_.Nat.sum_factorial_lt_factorial_succ {j : ℕ} (hj : 1 < j) :
     ∑ i ∈ range (j + 1), i ! < ∑ _i ∈ range (j + 1), j ! := ?_
     _ = (j + 1) * (j !) := by rw [sum_const, card_range, smul_eq_mul]
     _ = (j + 1)! := Nat.factorial_succ _
-  apply sum_lt_sum
-  apply (fun i hi => factorial_le <| by simpa only [mem_range, lt_succ] using hi)
+  apply sum_lt_sum (fun i hi => factorial_le <| by simpa only [mem_range, lt_succ] using hi) ?_
   use 0
   rw [factorial_zero]
   simp [hj]
@@ -182,11 +182,7 @@ lemma torsionfree_aux (a b : ℕ) [NeZero b] (h : a ∣ b) (x : ZMod b) (hx : a 
   rw [hy]
   simp
 
--- ZHat is torsion-free. LaTeX proof in the notes.
-lemma torsionfree (N : ℕ+) : Function.Injective (fun z : ZHat ↦ N * z) := by
-  rw [← AddMonoidHom.coe_mulLeft, injective_iff_map_eq_zero]
-  intro a ha
-  rw [AddMonoidHom.coe_mulLeft] at ha
+theorem eq_zero_of_mul_eq_zero (N : ℕ+) (a : ZHat) (ha : N * a = 0) : a = 0 := by
   ext j
   rw [zero_val, ← a.prop j (N * j) (by simp)]
   apply torsionfree_aux
@@ -198,7 +194,29 @@ lemma torsionfree (N : ℕ+) : Function.Injective (fun z : ZHat ↦ N * z) := by
     exact this -- missing lemma
   simpa only [ZMod.val_mul, ZMod.val_natCast, Nat.mod_mul_mod, ZMod.val_zero] using congrArg ZMod.val this
 
-instance ZHat_flat : Module.Flat ℤ ZHat := sorry --by torsion-freeness
+-- ZHat is torsion-free. LaTeX proof in the notes.
+lemma torsionfree (N : ℕ+) : Function.Injective (fun z : ZHat ↦ N * z) := by
+  rw [← AddMonoidHom.coe_mulLeft, injective_iff_map_eq_zero]
+  intro a ha
+  rw [AddMonoidHom.coe_mulLeft] at ha
+  exact eq_zero_of_mul_eq_zero N a ha
+
+instance ZHat_flat : Module.Flat ℤ ZHat := by
+  rw [Module.Flat.flat_iff_torsion_eq_bot]
+  rw [eq_bot_iff]
+  intro x hx
+  simp only [Submodule.mem_torsion'_iff, Subtype.exists, Submonoid.mk_smul, zsmul_eq_mul,
+    exists_prop, Submodule.mem_bot, mem_nonZeroDivisors_iff_ne_zero] at hx ⊢
+  obtain ⟨N, hN⟩ := hx
+  cases N
+  case ofNat N =>
+    simp only [Int.ofNat_eq_coe, ne_eq, cast_eq_zero, Int.cast_natCast] at hN
+    lift N to ℕ+ using by omega -- lol
+    exact eq_zero_of_mul_eq_zero _ _ hN.2
+  case negSucc N =>
+    simp only [ne_eq, Int.negSucc_ne_zero, not_false_eq_true, true_and, Int.cast_negSucc] at hN
+    rw [neg_mul, neg_eq_zero] at hN
+    exact eq_zero_of_mul_eq_zero ⟨N + 1, by omega⟩ _ hN
 
 lemma y_mul_N_eq_z (N : ℕ+) (z : ZHat) (hz : z N = 0) (j : ℕ+) :
     N * ((z (N * j)).val / (N : ℕ) : ZMod j) = z j := by
@@ -321,9 +339,61 @@ noncomputable abbrev zHatsub : AddSubgroup QHat :=
 noncomputable abbrev zsub : AddSubgroup QHat :=
   (Int.castRingHom QHat : ℤ →+ QHat).range
 
-lemma rat_meet_zHat : ratsub ⊓ zHatsub = zsub := sorry
+lemma ZMod.isUnit_natAbs {z : ℤ} {N : ℕ} : IsUnit (z.natAbs : ZMod N) ↔ IsUnit (z : ZMod N) := by
+  cases z.natAbs_eq with
+  | inl h | inr h => rw [h]; simp [-Int.natCast_natAbs]
 
-lemma rat_join_zHat : ratsub ⊔ zHatsub = ⊤ := sorry
+@[simp]
+lemma _root_.Algebra.TensorProduct.one_tmul_intCast {R : Type*} {A : Type*} {B : Type*}
+    [CommRing R] [Ring A] [Algebra R A] [Ring B] [Algebra R B] {z : ℤ} :
+    (1 : A) ⊗ₜ[R] (z : B) = (z : TensorProduct R A B) := by
+  rw [← map_intCast (F := B →ₐ[R] TensorProduct R A B),
+    Algebra.TensorProduct.includeRight_apply]
+
+lemma rat_meet_zHat : ratsub ⊓ zHatsub = zsub := by
+  apply le_antisymm
+  · intro x ⟨⟨l, hl⟩, ⟨r, hr⟩⟩
+    simp only [AddMonoidHom.coe_coe, Algebra.TensorProduct.includeLeft_apply,
+      Algebra.TensorProduct.includeRight_apply] at hl hr
+    rcases lowestTerms x with ⟨⟨N, z, hNz, hx⟩, unique⟩
+    have cop1 : IsCoprime l.den.toPNat' l.num := by
+      simp_rw [IsCoprime, ZHat.intCast_val, ← ZMod.isUnit_natAbs, ZMod.isUnit_iff_coprime,
+        PNat.toPNat'_coe l.den_pos]
+      exact l.reduced
+    have cop2 : IsCoprime 1 r := by
+      simp only [IsCoprime, PNat.val_ofNat]
+      exact isUnit_of_subsingleton _
+    have hcanon : x = (1/(l.den : ℚ)) ⊗ₜ[ℤ] (l.num : ZHat) := by
+      nth_rw 1 [← hl, ← Rat.num_div_den l, ← mul_one ((l.num : ℚ) / l.den), div_mul_comm,
+      mul_comm, ← zsmul_eq_mul, TensorProduct.smul_tmul, zsmul_eq_mul, mul_one]
+    rw [← PNat.toPNat'_coe l.den_pos, hx] at hcanon
+    obtain ⟨rfl, rfl⟩ := unique _ _ _ _ ⟨hNz, cop1, hcanon⟩
+    have : 1 = 1 / (((1 : ℕ+) : ℕ) : ℚ) := by simp
+    nth_rw 1 [← hx, ← hr, this] at hcanon
+    use l.num; rw [hx, (unique _ 1 _ r ⟨hNz, cop2, hcanon.symm⟩).1]
+    simp
+  · exact fun x ⟨k, hk⟩ ↦ by constructor <;> (use k; simp; exact hk)
+
+lemma rat_join_zHat : ratsub ⊔ zHatsub = ⊤ := by
+  rw [eq_top_iff]
+  intro x _
+  rcases x.canonicalForm with ⟨N, z, hNz⟩
+  rcases ZHat.nat_dense N z with ⟨q, r, hz, _⟩
+  have h : z - r = N * q := sub_eq_of_eq_add hz
+  rw [AddSubgroup.mem_sup]
+  use ((r : ℤ) / N : ℚ) ⊗ₜ[ℤ] 1
+  constructor
+  · simp
+  use 1 ⊗ₜ[ℤ] q
+  constructor
+  · simp
+  nth_rw 1 [← mul_one ((r : ℤ) / N : ℚ), div_mul_comm,
+    mul_comm, ← zsmul_eq_mul, TensorProduct.smul_tmul, zsmul_eq_mul, mul_one]
+  have : 1 = 1 / (N : ℚ) * (N : ℤ) := by simp
+  nth_rw 2 [this]
+  rw [mul_comm, ← zsmul_eq_mul, TensorProduct.smul_tmul, zsmul_eq_mul]
+  norm_cast; rw [← h, ← TensorProduct.tmul_add]
+  simp [hNz]
 
 end additive_structure_of_QHat
 
@@ -338,7 +408,65 @@ noncomputable abbrev unitszHatsub : Subgroup QHatˣ :=
 noncomputable abbrev unitszsub : Subgroup QHatˣ :=
   (Units.map (Int.castRingHom QHat : ℤ →* QHat)).range
 
-lemma unitsrat_meet_unitszHat : unitsratsub ⊓ unitszHatsub = unitszsub := sorry
+lemma unitsrat_meet_unitszHat : unitsratsub ⊓ unitszHatsub = unitszsub := by
+  apply le_antisymm
+  · intro x ⟨⟨q, hxq⟩, ⟨zHat, hxzHat⟩⟩
+    obtain ⟨z, (hz : (z : QHat) = x)⟩ : (x : QHat) ∈ zsub := by
+      rw [← rat_meet_zHat]
+      exact ⟨⟨q, by simp [← hxq]⟩, zHat, by simp [← hxzHat]⟩
+    have znez : z ≠ 0 := by
+      rintro rfl
+      simp [Eq.comm] at hz
+    let a := Int.sign z
+    let b := Int.natAbs z
+    set zinvRat : ℚ := a / b with zinvRat_def
+    have hzinvRat : z * zinvRat = 1 := by
+      rw [mul_div, div_eq_one_iff_eq]
+      · rw_mod_cast [Int.mul_sign z]
+      · exact_mod_cast Int.natAbs_ne_zero.mpr znez
+    let zinvZHat : ZHatˣ := zHat⁻¹
+    have hzinvZHat : ↑zHat * ↑zinvZHat = (1 : ZHat) := Units.mul_inv zHat
+    let xinv : QHatˣ := x⁻¹
+    have h1 : zinvRat ⊗ₜ[ℤ] (1 : ZHat) = xinv := by
+      apply Units.eq_inv_of_mul_eq_one_left
+      rw [← hz, ← zsmul_eq_mul, TensorProduct.smul_tmul', zsmul_eq_mul,
+        hzinvRat, Algebra.TensorProduct.one_def]
+    have h2 : (1 : ℚ) ⊗ₜ[ℤ] (Units.val zinvZHat) = xinv := by
+      apply Units.eq_inv_of_mul_eq_one_left
+      have hzHat : (1 : ℚ) ⊗ₜ[ℤ] (zHat : ZHat) = (x : QHat) := by simp [← hxzHat]
+      rw [← hzHat, Algebra.TensorProduct.tmul_mul_tmul, mul_one, hzinvZHat, Algebra.TensorProduct.one_def]
+    have h3 : zinvRat ⊗ₜ[ℤ] (1 : ZHat) = (1 / b : ℚ) ⊗ₜ[ℤ] (a : ZHat) := by
+      rw [zinvRat_def, ← mul_one (a : ℚ), ← mul_div,
+      ← zsmul_eq_mul, TensorProduct.smul_tmul, zsmul_eq_mul, mul_one]
+    have bpos : 0 < b := Int.natAbs_pos.2 znez
+    have heq : (1 / (((Nat.toPNat b bpos) : ℕ) : ℚ)) ⊗ₜ[ℤ] (a : ZHat) = (1 / (((1 : ℕ+) : ℕ) : ℚ)) ⊗ₜ[ℤ] ↑zinvZHat := by
+      have : ↑(Nat.toPNat b bpos) = b := by
+        unfold Nat.toPNat
+        rw [PNat.mk_coe]
+      rw [PNat.val_ofNat, Nat.cast_one, div_self one_ne_zero, this, ← h3, h1, h2]
+    have cop1 : IsCoprime (b.toPNat bpos) ↑a := by
+      rw [IsCoprime, ZHat.intCast_val, ← ZMod.isUnit_natAbs,
+        ZMod.isUnit_iff_coprime, Int.natAbs_sign_of_nonzero znez]
+      exact Nat.coprime_one_left _
+    have cop2 : IsCoprime 1 ↑zinvZHat := by
+      simp only [IsCoprime, PNat.val_ofNat, isUnit_of_subsingleton]
+    obtain ⟨hb, ha⟩ := (lowestTerms ↑x).2 (Nat.toPNat b bpos) 1 ↑a ↑zinvZHat ⟨cop1, cop2, heq⟩
+    have b1 : b = 1 := PNat.coe_eq_one_iff.2 hb
+    obtain ⟨u, rfl⟩ := Int.isUnit_iff_natAbs_eq.2 b1
+    use u
+    ext
+    norm_cast at hz
+  · intro x ⟨xz, hxz⟩
+    constructor
+    · use (Units.map ↑(Int.castRingHom ℚ)) xz
+      norm_cast
+    · use (Units.map ↑(Int.castRingHom ZHat)) xz
+      rw [← hxz, ← MonoidHom.comp_apply, ← Units.map_comp]
+      congr
+      ext x
+      · simp only [MonoidHom.coe_comp, MonoidHom.coe_coe, Function.comp_apply, Int.coe_castRingHom,
+        Algebra.TensorProduct.includeRight_apply, Algebra.TensorProduct.one_tmul_intCast]
+      simp
 
 -- this needs that ℤ is a PID.
 lemma unitsrat_join_unitszHat : unitsratsub ⊔ unitszHatsub = ⊤ := sorry
@@ -418,7 +546,7 @@ instance : Zero 𝓞 := ⟨zero⟩
 @[simp] lemma zero_im_oi : im_oi (0 : 𝓞) = 0 := rfl
 
 lemma toQuaternion_zero : toQuaternion 0 = 0 := by
-  ext <;> simp [toQuaternion]
+  ext <;> (simp [toQuaternion]; aesop)
 
 @[simp]
 lemma toQuaternion_eq_zero_iff {z} : toQuaternion z = 0 ↔ z = 0 :=
@@ -440,7 +568,7 @@ instance : One 𝓞 := ⟨one⟩
 @[simp] lemma one_im_oi : im_oi (1 : 𝓞) = 0 := rfl
 
 lemma toQuaternion_one : toQuaternion 1 = 1 := by
-  ext <;> simp [toQuaternion]
+  ext <;> (simp [toQuaternion]; aesop)
 
 /-! ## Neg (-) -/
 
@@ -522,7 +650,7 @@ lemma preserves_zsmul {G H : Type*} [Zero G] [Add G] [Neg G] [SMul ℕ G] [SubNe
     (neg : ∀ x, f (-x) = - f x)
     (z : ℤ) (g : G) :
     f (zsmulRec (· • ·) z g) = z • f g := by
-  induction z with
+  cases z with
   | ofNat n =>
     rw [zsmulRec, nsmul, Int.ofNat_eq_coe, natCast_zsmul]
   | negSucc n =>
@@ -825,7 +953,7 @@ lemma exists_near (a : ℍ) : ∃ q : 𝓞, dist a (toQuaternion q) < 1 := by
 
   use fromQuaternion ⟨x,y,z,w⟩
   rw [aux]
-  rw [NormedRing.dist_eq, ← sq_lt_one_iff (_root_.norm_nonneg _), sq,
+  rw [NormedRing.dist_eq, ← sq_lt_one_iff₀ (_root_.norm_nonneg _), sq,
     ← Quaternion.normSq_eq_norm_mul_self, normSq_def']
 
   simp only [sub_re, sub_imI, sub_imJ, sub_imK]
